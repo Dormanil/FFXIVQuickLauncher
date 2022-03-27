@@ -24,7 +24,7 @@ namespace XIVLauncher
             {
                 ReleaseEntry? newRelease = null;
 
-                using (var updateManager = await UpdateManager.GitHubUpdateManager(repoUrl: "https://github.com/Dormanil/FFXIVQuicklauncher", prerelease: downloadPrerelease, applicationName: "XIVLauncher"))
+                using (var updateManager = new GithubUpdateManager(repoUrl: "https://github.com/Dormanil/FFXIVQuicklauncher", prerelease: downloadPrerelease, applicationIdOverride: "XIVLauncher"))
                 {
                     // TODO: is this allowed?
                     SquirrelAwareApp.HandleEvents(
