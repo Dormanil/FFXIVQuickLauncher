@@ -14,11 +14,13 @@ using System.Windows.Threading;
 using CheapLoc;
 using Serilog;
 using XIVLauncher.Accounts;
-using XIVLauncher.Addon;
 using XIVLauncher.Common;
+using XIVLauncher.Common.Addon;
 using XIVLauncher.Common.Dalamud;
 using XIVLauncher.Common.Game;
+using XIVLauncher.Common.Game.Exceptions;
 using XIVLauncher.Common.Game.Patch;
+using XIVLauncher.Common.Game.Patch.Acquisition;
 using XIVLauncher.Common.Game.Patch.PatchList;
 using XIVLauncher.Common.PlatformAbstractions;
 using XIVLauncher.Common.Windows;
@@ -65,17 +67,8 @@ namespace XIVLauncher.Windows.ViewModel
             LoginRepairCommand = new SyncCommand(GetLoginFunc(AfterLoginAction.Repair), () => !IsLoggingIn);
 
             Launcher = App.GlobalSteamTicket == null ?
-                new(App.Steam, CommonUniqueIdCache.Instance, CommonSettings.Instance) :
-                new(App.GlobalSteamTicket, CommonUniqueIdCache.Instance, CommonSettings.Instance);
-        }
-
-        private void InstallerOnFail()
-        {
-            CustomMessageBox.Show(
-                Loc.Localize("PatchInstallerInstallFailed", "The patch installer ran into an error.\nPlease report this error.\n\nPlease try again or use the official launcher."),
-                "XIVLauncher Error", MessageBoxButton.OK, MessageBoxImage.Error);
-
-            Environment.Exit(0);
+                new(App.Steam, App.UniqueIdCache, CommonSettings.Instance) :
+                new(App.GlobalSteamTicket, App.UniqueIdCache, CommonSettings.Instance);
         }
 
         private Action<object> GetLoginFunc(AfterLoginAction action)
@@ -88,9 +81,9 @@ namespace XIVLauncher.Windows.ViewModel
                 if (IsAutoLogin && App.Settings.HasShownAutoLaunchDisclaimer.GetValueOrDefault(false) == false)
                 {
                     CustomMessageBox.Builder
-                        .NewFrom(Loc.Localize("AutoLoginIntro", "You are enabling Auto-Login.\nThis means that XIVLauncher will always log you in with the current account and you will not see this window.\n\nTo change settings and accounts, you have to hold the shift button on your keyboard while clicking the XIVLauncher icon."))
-                        .WithParentWindow(_window)
-                        .Show();
+                                    .NewFrom(Loc.Localize("AutoLoginIntro", "You are enabling Auto-Login.\nThis means that XIVLauncher will always log you in with the current account and you will not see this window.\n\nTo change settings and accounts, you have to hold the shift button on your keyboard while clicking the XIVLauncher icon."))
+                                    .WithParentWindow(_window)
+                                    .Show();
 
                     App.Settings.HasShownAutoLaunchDisclaimer = true;
                 }
@@ -98,10 +91,10 @@ namespace XIVLauncher.Windows.ViewModel
                 if (Util.CheckIsGameOpen() && action == AfterLoginAction.Repair)
                 {
                     CustomMessageBox.Builder
-                        .NewFrom(Loc.Localize("GameIsOpenRepairError", "The game and/or the official launcher are open. XIVLauncher cannot repair the game if this is the case.\nPlease close them and try again."))
-                        .WithImage(MessageBoxImage.Exclamation)
-                        .WithParentWindow(_window)
-                        .Show();
+                                    .NewFrom(Loc.Localize("GameIsOpenRepairError", "The game and/or the official launcher are open. XIVLauncher cannot repair the game if this is the case.\nPlease close them and try again."))
+                                    .WithImage(MessageBoxImage.Exclamation)
+                                    .WithParentWindow(_window)
+                                    .Show();
 
                     return;
                 }
@@ -150,8 +143,8 @@ namespace XIVLauncher.Windows.ViewModel
                 catch (Exception ex)
                 {
                     CustomMessageBox.Builder.NewFromUnexpectedException(ex, "GetLoginFunc/Task")
-                        .WithParentWindow(_window)
-                        .Show();
+                                    .WithParentWindow(_window)
+                                    .Show();
                 }
 
                 IsLoggingIn = false;
@@ -214,10 +207,9 @@ namespace XIVLauncher.Windows.ViewModel
                 return;
             }
 
-            var hasValidCache = CommonUniqueIdCache.Instance.HasValidCache(username) && App.Settings.UniqueIdCacheEnabled;
+            var hasValidCache = App.UniqueIdCache.HasValidCache(username) && App.Settings.UniqueIdCacheEnabled;
 
             var otp = string.Empty;
-            var signal = new ManualResetEvent(false);
 
             if (isOtp && (!hasValidCache || action == AfterLoginAction.Repair))
             {
@@ -263,16 +255,13 @@ namespace XIVLauncher.Windows.ViewModel
                 Loc.Localize("LoginNoOauthTitle", "Login issue"), MessageBoxButton.OK, MessageBoxImage.Error, parentWindow: _window);
         }
 
-        private async Task<Launcher.LoginResult> TryLoginToGame(string username, string password, string otp, bool isSteam, AfterLoginAction action)
+        private async Task<bool> CheckGateStatus()
         {
-            Log.Information("LoginToGame() called");
+            GateStatus? gateStatus = null;
 
-            bool? gateStatus = null;
-
-#if !DEBUG
             try
             {
-                gateStatus = await this.Launcher.GetGateStatus();
+                gateStatus = await Launcher.GetGateStatus(App.Settings.Language.GetValueOrDefault(ClientLanguage.English)).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -289,10 +278,71 @@ namespace XIVLauncher.Windows.ViewModel
                                 .WithParentWindow(_window)
                                 .Show();
 
+                return false;
+            }
+
+            if (!gateStatus.Status)
+            {
+                var message = Loc.Localize("GateClosed", "FFXIV is currently under maintenance. Please try again later or see official sources for more information.");
+
+                if (gateStatus.Message != null)
+                {
+                    var gateMessage = gateStatus.Message.Aggregate("", (current, s) => current + s + "\n");
+
+                    if (!string.IsNullOrEmpty(gateMessage))
+                        message = gateMessage;
+                }
+
+                var builder = CustomMessageBox.Builder.NewFrom(message)
+                                              .WithImage(MessageBoxImage.Asterisk)
+                                              .WithButtons(MessageBoxButton.OK)
+                                              .WithCaption("XIVLauncher")
+                                              .WithParentWindow(_window);
+
+                if (gateStatus.News != null && gateStatus.News.Count > 0)
+                {
+                    var description = gateStatus.News.Aggregate("", (current, s) => current + s + "\n");
+
+                    if (!string.IsNullOrEmpty(description))
+                        builder.WithDescription(description);
+                }
+
+                builder.Show();
+
+                return false;
+            }
+
+            return true;
+        }
+
+        private async Task<Launcher.LoginResult> TryLoginToGame(string username, string password, string otp, bool isSteam, AfterLoginAction action)
+        {
+            bool? loginStatus = null;
+
+#if !DEBUG
+            try
+            {
+                loginStatus = await Launcher.GetLoginStatus().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Could not obtain gate status");
+            }
+
+            if (loginStatus == null)
+            {
+                CustomMessageBox.Builder.NewFrom(Loc.Localize("GateUnreachable", "The login servers could not be reached. This usually indicates that the game is under maintenance, or that your connection to the login servers is unstable.\n\nPlease try again later."))
+                                .WithImage(MessageBoxImage.Asterisk)
+                                .WithButtons(MessageBoxButton.OK)
+                                .WithShowHelpLinks(true)
+                                .WithCaption("XIVLauncher")
+                                .WithParentWindow(_window)
+                                .Show();
+
                 return null;
             }
 
-            if (gateStatus == false)
+            if (loginStatus == false)
             {
                 CustomMessageBox.Builder.NewFrom(Loc.Localize("GateClosed", "FFXIV is currently under maintenance. Please try again later or see official sources for more information."))
                                 .WithImage(MessageBoxImage.Asterisk)
@@ -317,14 +367,14 @@ namespace XIVLauncher.Windows.ViewModel
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "StartGame failed... (GateStatus={0})", gateStatus);
+                Log.Error(ex, "StartGame failed... (LoginStatus={0})", loginStatus);
 
                 var msgbox = new CustomMessageBox.Builder()
-                    .WithCaption(Loc.Localize("LoginNoOauthTitle", "Login issue"))
-                    .WithImage(MessageBoxImage.Error)
-                    .WithShowHelpLinks(true)
-                    .WithShowDiscordLink(true)
-                    .WithParentWindow(_window);
+                             .WithCaption(Loc.Localize("LoginNoOauthTitle", "Login issue"))
+                             .WithImage(MessageBoxImage.Error)
+                             .WithShowHelpLinks(true)
+                             .WithShowDiscordLink(true)
+                             .WithParentWindow(_window);
 
                 bool disableAutoLogin = false;
 
@@ -336,6 +386,11 @@ namespace XIVLauncher.Windows.ViewModel
                         .WithAppendText("\n\n")
                         .WithAppendText(Loc.Localize("LoginIoErrorActionable",
                             "This may mean that the game path set in XIVLauncher isn't preset, e.g. on a disconnected drive or network storage. Please check the game path in the XIVLauncher settings."));
+                }
+                else if (ex is InvalidVersionFilesException)
+                {
+                    msgbox.WithTextFormatted(Loc.Localize("LoginInvalidVersionFiles",
+                        "Version information could not be read from your game files.\n\nYou need to reinstall or repair the game."), ex.Message);
                 }
                 else if (ex is SteamException)
                 {
@@ -383,8 +438,10 @@ namespace XIVLauncher.Windows.ViewModel
                 {
                     ShowInternetError();
                 }
-                else if (ex is InvalidResponseException)
+                else if (ex is InvalidResponseException iex)
                 {
+                    Log.Error("Invalid response from server! Context: {Message}\n{Document}", ex.Message, iex.Document);
+
                     msgbox.WithText(Loc.Localize("LoginGenericServerIssue",
                         "The server has sent an invalid response. This is known to occur during outages or when servers are under heavy load.\nPlease wait a minute and try again, or try using the official launcher.\n\nYou can learn more about outages on the Lodestone."));
                 }
@@ -393,11 +450,11 @@ namespace XIVLauncher.Windows.ViewModel
                 {
                     disableAutoLogin = true;
                     msgbox.WithShowNewGitHubIssue(true)
-                        .WithAppendDescription(ex.ToString())
-                        .WithAppendSettingsDescription("Login")
-                        .WithAppendText("\n\n")
-                        .WithAppendText(Loc.Localize("CheckLoginInfoNotAdditionally",
-                            "Please check your login information or try again."));
+                          .WithAppendDescription(ex.ToString())
+                          .WithAppendSettingsDescription("Login")
+                          .WithAppendText("\n\n")
+                          .WithAppendText(Loc.Localize("CheckLoginInfoNotAdditionally",
+                              "Please check your login information or try again."));
                 }
 
                 if (disableAutoLogin && App.Settings.AutologinEnabled)
@@ -472,7 +529,7 @@ namespace XIVLauncher.Windows.ViewModel
                     {
                         CustomMessageBox.Show(
                             Loc.Localize("LoginRepairResponseIsNotNeedsPatchGame",
-                                "Please accept the FINAL FANTASY XIV Terms of Use in the official launcher."),
+                                "The server sent an incorrect response - the repair cannot proceed."),
                             "Error", MessageBoxButton.OK, MessageBoxImage.Error, parentWindow: _window);
 
                         return false;
@@ -526,6 +583,11 @@ namespace XIVLauncher.Windows.ViewModel
 
             if (CustomMessageBox.AssertOrShowError(loginResult.State == Launcher.LoginState.Ok, "TryProcessLoginResult: loginResult.State should have been Launcher.LoginState.Ok", parentWindow: _window))
                 return false;
+
+#if !DEBUG
+            if (!await CheckGateStatus().ConfigureAwait(false))
+                return false;
+#endif
 
             Hide();
 
@@ -885,9 +947,22 @@ namespace XIVLauncher.Windows.ViewModel
             Environment.Exit(0);
         }
 
+        private void InstallerOnFail()
+        {
+            CustomMessageBox.Show(
+                Loc.Localize("PatchInstallerInstallFailed", "The patch installer ran into an error.\nPlease report this error.\n\nPlease try again or use the official launcher."),
+                "XIVLauncher Error", MessageBoxButton.OK, MessageBoxImage.Error);
+
+            Environment.Exit(0);
+        }
+
         public async Task<Process> StartGameAndAddon(Launcher.LoginResult loginResult, bool isSteam, bool forceNoDalamud)
         {
-            var dalamudLauncher = new DalamudLauncher(new WindowsDalamudRunner(), App.DalamudUpdater, App.Settings.InGameAddonLoadMethod.GetValueOrDefault(DalamudLoadMethod.DllInject), CommonSettings.Instance);
+            var dalamudLauncher = new DalamudLauncher(new WindowsDalamudRunner(), App.DalamudUpdater, App.Settings.InGameAddonLoadMethod.GetValueOrDefault(DalamudLoadMethod.DllInject),
+                App.Settings.GamePath,
+                App.Settings.Language.GetValueOrDefault(ClientLanguage.English),
+                (int)App.Settings.DalamudInjectionDelayMs);
+
             var dalamudOk = false;
 
             var dalamudCompatCheck = new WindowsDalamudCompatibilityCheck();
@@ -929,19 +1004,19 @@ namespace XIVLauncher.Windows.ViewModel
                         "Could not launch Dalamud successfully. This might be caused by your antivirus.\nTo prevent this, please add an exception for the folder \"%AppData%\\XIVLauncher\\addons\".");
 
                     CustomMessageBox.Builder
-                        .NewFrom(runnerErrorMessage)
-                        .WithImage(MessageBoxImage.Error)
-                        .WithButtons(MessageBoxButton.OK)
-                        .WithShowHelpLinks()
-                        .WithParentWindow(_window)
-                        .Show();
+                                    .NewFrom(runnerErrorMessage)
+                                    .WithImage(MessageBoxImage.Error)
+                                    .WithButtons(MessageBoxButton.OK)
+                                    .WithShowHelpLinks()
+                                    .WithParentWindow(_window)
+                                    .Show();
                 }
             }
 
             var gameRunner = new WindowsGameRunner(dalamudLauncher, dalamudOk, App.Settings.InGameAddonLoadMethod.GetValueOrDefault(DalamudLoadMethod.DllInject));
 
             // We won't do any sanity checks here anymore, since that should be handled in StartLogin
-            var gameProcess = this.Launcher.LaunchGame(gameRunner,
+            var launched = this.Launcher.LaunchGame(gameRunner,
                 loginResult.UniqueId,
                 loginResult.OauthLogin.Region,
                 loginResult.OauthLogin.MaxExpansion,
@@ -955,7 +1030,7 @@ namespace XIVLauncher.Windows.ViewModel
 
             Troubleshooting.LogTroubleshooting();
 
-            if (gameProcess == null)
+            if (launched is not Process gameProcess)
             {
                 Log.Information("GameProcess was null...");
                 IsLoggingIn = false;
@@ -970,7 +1045,7 @@ namespace XIVLauncher.Windows.ViewModel
 
                 var addons = App.Settings.AddonList.Where(x => x.IsEnabled).Select(x => x.Addon).Cast<IAddon>().ToList();
 
-                addonMgr.RunAddons(gameProcess, App.Settings, addons);
+                addonMgr.RunAddons(gameProcess.Id, addons);
             }
             catch (Exception ex)
             {
@@ -1106,9 +1181,11 @@ namespace XIVLauncher.Windows.ViewModel
                 return false;
             }
 
-            using var installer = new Common.Game.Patch.PatchInstaller(CommonSettings.Instance);
-            var patcher = new PatchManager(CommonSettings.Instance, repository, pendingPatches, App.Settings.GamePath, App.Settings.PatchPath, installer, this.Launcher, sid);
-            patcher.OnFail += PatcherOnFail;
+            using var installer = new Common.Game.Patch.PatchInstaller(App.Settings.KeepPatches ?? false);
+            var patcher = new PatchManager(App.Settings.PatchAcquisitionMethod ?? AcquisitionMethod.Aria, App.Settings.SpeedLimitBytes,
+                repository, pendingPatches, App.Settings.GamePath, App.Settings.PatchPath, installer, this.Launcher, sid);
+            patcher.OnFail += this.PatcherOnFail;
+            installer.OnFail += this.InstallerOnFail;
 
             Hide();
 
@@ -1124,7 +1201,7 @@ namespace XIVLauncher.Windows.ViewModel
 
             try
             {
-                await patcher.PatchAsync().ConfigureAwait(false);
+                await patcher.PatchAsync(new FileInfo(Path.Combine(Paths.RoamingPath, "aria2.log"))).ConfigureAwait(false);
                 return true;
             }
             catch (PatchInstallerException ex)

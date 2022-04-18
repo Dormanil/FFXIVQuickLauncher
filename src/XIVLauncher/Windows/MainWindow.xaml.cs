@@ -17,7 +17,6 @@ using XIVLauncher.Common;
 using XIVLauncher.Common.Dalamud;
 using XIVLauncher.Common.Game;
 using XIVLauncher.Common.Game.Patch.Acquisition;
-using XIVLauncher.PlatformAbstractions;
 using XIVLauncher.Support;
 using XIVLauncher.Windows.ViewModel;
 using Timer = System.Timers.Timer;
@@ -242,11 +241,11 @@ namespace XIVLauncher.Windows
             // grey out world status icon while deferred check is running
             WorldStatusPackIcon.Foreground = new SolidColorBrush(Color.FromRgb(38, 38, 38));
 
-            _launcher.GetGateStatus().ContinueWith((resultTask) =>
+            _launcher.GetGateStatus(App.Settings.Language.GetValueOrDefault(ClientLanguage.English)).ContinueWith((resultTask) =>
             {
                 try
                 {
-                    var brushToSet = resultTask.Result ? worldStatusBrushOk : null;
+                    var brushToSet = resultTask.Result.Status ? worldStatusBrushOk : null;
                     Dispatcher.InvokeAsync(() =>  WorldStatusPackIcon.Foreground = brushToSet ?? new SolidColorBrush(Color.FromRgb(242, 24, 24)));
                 }
                 catch
@@ -266,7 +265,7 @@ namespace XIVLauncher.Windows
 
             if (App.Settings.UniqueIdCacheEnabled && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
             {
-                CommonUniqueIdCache.Instance.Reset();
+                App.UniqueIdCache.Reset();
                 Console.Beep(523, 150); // Feedback without popup
             }
 
@@ -401,7 +400,7 @@ namespace XIVLauncher.Windows
         private void SetupMaintenanceQueueTimer()
         {
             // This is a good indicator that we should clear the UID cache
-            CommonUniqueIdCache.Instance.Reset();
+            App.UniqueIdCache.Reset();
 
             _maintenanceQueueTimer = new Timer
             {
@@ -419,7 +418,7 @@ namespace XIVLauncher.Windows
 
             try
             {
-                gateStatus = Task.Run(() => _launcher.GetGateStatus()).Result;
+                gateStatus = Task.Run(() => _launcher.GetGateStatus(App.Settings.Language.GetValueOrDefault(ClientLanguage.English))).Result.Status;
             }
             catch
             {

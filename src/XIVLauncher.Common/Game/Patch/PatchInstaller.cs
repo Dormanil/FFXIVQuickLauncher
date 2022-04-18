@@ -2,21 +2,22 @@
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
-using System.Text;
 using System.Threading;
-using Newtonsoft.Json;
 using Serilog;
-using SharedMemory;
 using XIVLauncher.Common.Game.Patch.PatchList;
 using XIVLauncher.Common.PatcherIpc;
-using XIVLauncher.Common.PlatformAbstractions;
+using XIVLauncher.Common.Patching;
+using XIVLauncher.Common.Patching.Rpc;
+using XIVLauncher.Common.Patching.Rpc.Implementations;
 
 namespace XIVLauncher.Common.Game.Patch
 {
     public class PatchInstaller : IDisposable
     {
-        private readonly ISettings _settings;
-        private RpcBuffer _rpc;
+        private readonly bool keepPatches;
+        private IRpc rpc;
+
+        private RemotePatchInstaller? internalPatchInstaller;
 
         public enum InstallerState
         {
@@ -31,62 +32,71 @@ namespace XIVLauncher.Common.Game.Patch
 
         public event Action OnFail;
 
-        public PatchInstaller(ISettings settings)
+        public PatchInstaller(bool keepPatches)
         {
-            this._settings = settings;
+            this.keepPatches = keepPatches;
         }
 
-        public void StartIfNeeded()
+        public void StartIfNeeded(bool external = true)
         {
             var rpcName = "XLPatcher" + Guid.NewGuid().ToString();
 
             Log.Information("[PATCHERIPC] Starting patcher with '{0}'", rpcName);
 
-            _rpc = new RpcBuffer(rpcName, RemoteCallHandler);
-
-            var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
-                "XIVLauncher.PatchInstaller.exe");
-
-            var startInfo = new ProcessStartInfo(path);
-            startInfo.UseShellExecute = true;
-
-            //Start as admin if needed
-            if (!EnvironmentSettings.IsNoRunas && Environment.OSVersion.Version.Major >= 6)
-                startInfo.Verb = "runas";
-
-            startInfo.Arguments = $"rpc {rpcName}";
-
-            State = InstallerState.NotReady;
-
-            try
+            if (external)
             {
-                Process.Start(startInfo);
+                this.rpc = new SharedMemoryRpc(rpcName);
+                this.rpc.MessageReceived += RemoteCallHandler;
+
+                var path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
+                    "XIVLauncher.PatchInstaller.exe");
+
+                var startInfo = new ProcessStartInfo(path);
+                startInfo.UseShellExecute = true;
+
+                //Start as admin if needed
+                if (!EnvironmentSettings.IsNoRunas && Environment.OSVersion.Version.Major >= 6)
+                    startInfo.Verb = "runas";
+
+                startInfo.Arguments = $"rpc {rpcName}";
+
+                State = InstallerState.NotReady;
+
+                try
+                {
+                    Process.Start(startInfo);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Could not launch Patch Installer");
+                    throw new PatchInstallerException("Start failed.", ex);
+                }
             }
-            catch (Exception ex)
+            else
             {
-                Log.Error(ex, "Could not launch Patch Installer");
-                throw new PatchInstallerException("Start failed.", ex);
+                this.rpc = new InProcessRpc(rpcName);
+                this.rpc.MessageReceived += RemoteCallHandler;
+
+                this.internalPatchInstaller = new RemotePatchInstaller(new InProcessRpc(rpcName));
+                this.internalPatchInstaller.Start();
             }
         }
 
-        private void RemoteCallHandler(ulong msgId, byte[] payload)
+        private void RemoteCallHandler(PatcherIpcEnvelope envelope)
         {
-            var json = IpcHelpers.Base64Decode(Encoding.ASCII.GetString(payload));
-            Log.Information("[PATCHERIPC] IPC({0}): {1}", msgId, json);
-
-            var msg = JsonConvert.DeserializeObject<PatcherIpcEnvelope>(json, IpcHelpers.JsonSettings);
-
-            switch (msg.OpCode)
+            switch (envelope.OpCode)
             {
                 case PatcherIpcOpCode.Hello:
                     //_client.Initialize(_clientPort);
                     Log.Information("[PATCHERIPC] GOT HELLO");
                     State = InstallerState.Ready;
                     break;
+
                 case PatcherIpcOpCode.InstallOk:
                     Log.Information("[PATCHERIPC] INSTALL OK");
                     State = InstallerState.Ready;
                     break;
+
                 case PatcherIpcOpCode.InstallFailed:
                     State = InstallerState.Failed;
                     OnFail?.Invoke();
@@ -94,6 +104,7 @@ namespace XIVLauncher.Common.Game.Patch
                     Stop();
                     Environment.Exit(0);
                     break;
+
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -108,7 +119,7 @@ namespace XIVLauncher.Common.Game.Patch
 
                 Thread.Sleep(500);
             }
-            
+
             throw new PatchInstallerException("Installer RPC timed out.");
         }
 
@@ -117,7 +128,7 @@ namespace XIVLauncher.Common.Game.Patch
             if (State == InstallerState.NotReady || State == InstallerState.NotStarted || State == InstallerState.Busy)
                 return;
 
-            SendIpcMessage(new PatcherIpcEnvelope
+            this.rpc.SendMessage(new PatcherIpcEnvelope
             {
                 OpCode = PatcherIpcOpCode.Bye
             });
@@ -126,7 +137,7 @@ namespace XIVLauncher.Common.Game.Patch
         public void StartInstall(DirectoryInfo gameDirectory, FileInfo file, PatchListEntry patch, Repository repo)
         {
             State = InstallerState.Busy;
-            SendIpcMessage(new PatcherIpcEnvelope
+            this.rpc.SendMessage(new PatcherIpcEnvelope
             {
                 OpCode = PatcherIpcOpCode.StartInstall,
                 Data = new PatcherIpcStartInstall
@@ -135,33 +146,18 @@ namespace XIVLauncher.Common.Game.Patch
                     PatchFile = file,
                     Repo = repo,
                     VersionId = patch.VersionId,
-                    KeepPatch = _settings.KeepPatches.GetValueOrDefault(false)
+                    KeepPatch = this.keepPatches,
                 }
             });
         }
 
         public void FinishInstall(DirectoryInfo gameDirectory)
         {
-            SendIpcMessage(new PatcherIpcEnvelope
+            this.rpc.SendMessage(new PatcherIpcEnvelope
             {
                 OpCode = PatcherIpcOpCode.Finish,
                 Data = gameDirectory
             });
-        }
-
-        private void SendIpcMessage(PatcherIpcEnvelope envelope)
-        {
-            try
-            {
-                var json = IpcHelpers.Base64Encode(JsonConvert.SerializeObject(envelope, IpcHelpers.JsonSettings));
-
-                Log.Information("[PATCHERIPC] SEND: " + json);
-                _rpc.RemoteRequest(Encoding.ASCII.GetBytes(json));
-            }
-            catch (Exception e)
-            {
-                Log.Error(e, "[PATCHERIPC] Failed to send message.");
-            }
         }
 
         public void Dispose()

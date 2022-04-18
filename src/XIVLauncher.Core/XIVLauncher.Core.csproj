@@ -9,6 +9,8 @@
         <LangVersion>latest</LangVersion>
         <ApplicationIcon>Resources\dalamud_icon.ico</ApplicationIcon>
 
+        <Version>1.0.0.1</Version>
+        
         <!--
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
         <PublishSingleFile>true</PublishSingleFile>
@@ -16,19 +18,25 @@
         -->
     </PropertyGroup>
 
+    <PropertyGroup Label="Configuration" Condition="'$(Configuration)'=='Release'">
+        <AppOutputBase>$(MSBuildProjectDirectory)\</AppOutputBase>
+        <PathMap>$(AppOutputBase)=C:\goatsoft\xl\XIVLauncher.Core\</PathMap>
+    </PropertyGroup>
+
     <ItemGroup>
+      <PackageReference Include="CheapLoc" Version="1.1.6" />
       <PackageReference Include="Config.Net" Version="4.19.0" />
       <PackageReference Include="ImGui.NET" Version="1.87.2" />
-      <PackageReference Include="KeySharp" Version="1.0.0" />
+      <PackageReference Include="KeySharp" Version="1.0.2" />
       <PackageReference Include="Serilog" Version="2.10.0" />
       <PackageReference Include="Serilog.Enrichers.Thread" Version="3.1.0" />
       <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
       <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
       <PackageReference Include="SixLabors.ImageSharp" Version="1.0.4" />
-      <PackageReference Include="Veldrid" Version="4.8.0" />
-      <PackageReference Include="Veldrid.ImageSharp" Version="4.8.0" />
-      <PackageReference Include="Veldrid.SDL2" Version="4.8.0" />
-      <PackageReference Include="Veldrid.StartupUtilities" Version="4.8.0" />
+      <PackageReference Include="goaaats.Veldrid" Version="4.9.0-beta1-g70f642e82e" />
+      <PackageReference Include="goaaats.Veldrid.ImageSharp" Version="4.9.0-beta1-g70f642e82e" />
+      <PackageReference Include="goaaats.Veldrid.SDL2" Version="4.9.0-beta1-g70f642e82e" />
+      <PackageReference Include="goaaats.Veldrid.StartupUtilities" Version="4.9.0-beta1-g70f642e82e" />
     </ItemGroup>
 
     <ItemGroup>
@@ -50,10 +58,66 @@
 
         <EmbeddedResource Include="Resources/bg1.jpg" LogicalName="bg1.jpg" />
     </ItemGroup>
+    
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+        <Resource Remove="Resources/binaries/aria2c-xl.exe" />
+        <Content Include="Resources/binaries/aria2c-xl.exe">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+        <Resource Remove="Resources/binaries/DalamudWineHelper.exe" />
+        <Content Include="Resources/binaries/DalamudWineHelper.exe">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\XIVLauncher.Common.Windows\XIVLauncher.Common.Windows.csproj" />
       <ProjectReference Include="..\XIVLauncher.Common\XIVLauncher.Common.csproj" />
     </ItemGroup>
 
+    <!-- Git -->
+    <Target Name="GetGitHash" BeforeTargets="WriteGitHash" Condition="'$(BuildHash)' == ''">
+        <PropertyGroup>
+            <!-- temp file for the git version (lives in "obj" folder)-->
+            <VerFile>$(IntermediateOutputPath)gitver</VerFile>
+        </PropertyGroup>
+        <!-- write the hash to the temp file.-->
+        <Exec Command="git -C &quot;$(ProjectDir.Replace('\','\\'))&quot; describe --long --always --dirty &gt; $(VerFile)" />
+        <!-- read the version into the GitVersion itemGroup-->
+        <ReadLinesFromFile File="$(VerFile)">
+            <Output TaskParameter="Lines" ItemName="GitVersion" />
+        </ReadLinesFromFile>
+        <!-- Set the BuildHash property to contain the GitVersion, if it wasn't already set.-->
+        <PropertyGroup>
+            <BuildHash>@(GitVersion)</BuildHash>
+        </PropertyGroup>
+    </Target>
+    <Target Name="WriteGitHash" BeforeTargets="CoreCompile">
+        <!-- names the obj/.../CustomAssemblyInfo.cs file -->
+        <PropertyGroup>
+            <CustomAssemblyInfoFile>$(IntermediateOutputPath)CustomAssemblyInfo.cs</CustomAssemblyInfoFile>
+        </PropertyGroup>
+        <!-- includes the CustomAssemblyInfo for compilation into your project -->
+        <ItemGroup>
+            <Compile Include="$(CustomAssemblyInfoFile)" />
+        </ItemGroup>
+        <!-- defines the AssemblyMetadata attribute that will be written -->
+        <ItemGroup>
+            <AssemblyAttributes Include="AssemblyMetadata">
+                <_Parameter1>GitHash</_Parameter1>
+                <_Parameter2>$(BuildHash)</_Parameter2>
+            </AssemblyAttributes>
+
+            <AssemblyAttributes Include="AssemblyMetadata">
+                <_Parameter1>BuildOrigin</_Parameter1>
+                <_Parameter2>$(GITHUB_REPOSITORY)</_Parameter2>
+            </AssemblyAttributes>
+        </ItemGroup>
+        <!-- writes the attribute to the customAssemblyInfo file -->
+        <WriteCodeFragment Language="C#" OutputFile="$(CustomAssemblyInfoFile)" AssemblyAttributes="@(AssemblyAttributes)" />
+    </Target>
+    
 </Project>

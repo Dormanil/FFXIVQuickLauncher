@@ -14,12 +14,22 @@ namespace XIVLauncher.Common.Windows
 
         public void Initialize(uint appId)
         {
+            // workaround because SetEnvironmentVariable doesn't actually touch the process environment on unix
+            if (Environment.OSVersion.Platform == PlatformID.Unix) {
+                [System.Runtime.InteropServices.DllImport("c")]
+                static extern int setenv(string name, string value, int overwrite);
+
+                setenv("SteamAppId", appId.ToString(), 1);
+            }
+
             SteamClient.Init(appId);
         }
 
         public bool IsValid => SteamClient.IsValid;
 
-        public bool BLoggedOn() => SteamClient.IsLoggedOn;
+        public bool BLoggedOn => SteamClient.IsLoggedOn;
+
+        public bool BOverlayNeedsPresent => SteamUtils.DoesOverlayNeedPresent;
 
         public void Shutdown()
         {
@@ -50,6 +60,12 @@ namespace XIVLauncher.Common.Windows
         public string GetEnteredGamepadText()
         {
             return SteamUtils.GetEnteredGamepadText();
+        }
+
+        public bool ShowFloatingGamepadTextInput(ISteam.EFloatingGamepadTextInputMode mode, int x, int y, int width, int height)
+        {
+            // Facepunch.Steamworks doesn't have this...
+            return false;
         }
 
         public bool IsRunningOnSteamDeck()

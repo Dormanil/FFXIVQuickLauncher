@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using Config.Net;
 using Newtonsoft.Json;
-using XIVLauncher.Addon;
+using XIVLauncher.Common.Addon;
 
-namespace XIVLauncher.Common.Parsers
+namespace XIVLauncher.Settings.Parsers
 {
     class AddonListParser : ITypeParser
     {

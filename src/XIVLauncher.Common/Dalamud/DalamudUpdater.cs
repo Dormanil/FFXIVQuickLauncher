@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -15,7 +16,10 @@ namespace XIVLauncher.Common.Dalamud
 {
     public class DalamudUpdater
     {
-        private readonly IUniqueIdCache cache;
+        private readonly DirectoryInfo addonDirectory;
+        private readonly DirectoryInfo runtimeDirectory;
+        private readonly DirectoryInfo assetDirectory;
+        private readonly IUniqueIdCache? cache;
         public DownloadState State { get; private set; } = DownloadState.Unknown;
         public bool IsStaging { get; private set; } = false;
 
@@ -47,8 +51,11 @@ namespace XIVLauncher.Common.Dalamud
             NoIntegrity
         }
 
-        public DalamudUpdater(IUniqueIdCache cache)
+        public DalamudUpdater(DirectoryInfo addonDirectory, DirectoryInfo runtimeDirectory, DirectoryInfo assetDirectory, IUniqueIdCache? cache)
         {
+            this.addonDirectory = addonDirectory;
+            this.runtimeDirectory = runtimeDirectory;
+            this.assetDirectory = assetDirectory;
             this.cache = cache;
         }
 
@@ -98,18 +105,31 @@ namespace XIVLauncher.Common.Dalamud
         private static string GetBetaTrackName(DalamudSettings settings) =>
             string.IsNullOrEmpty(settings.DalamudBetaKind) ? "staging" : settings.DalamudBetaKind;
 
-        private static async Task<(DalamudVersionInfo release, DalamudVersionInfo staging)> GetVersionInfo(DalamudSettings settings)
+        private static async Task<(DalamudVersionInfo release, DalamudVersionInfo? staging)> GetVersionInfo(DalamudSettings settings)
         {
             using var client = new HttpClient
             {
                 Timeout = TimeSpan.FromMinutes(5),
             };
 
-            var versionInfoJsonRelease = await client.GetStringAsync(DalamudLauncher.REMOTE_BASE + "release");
-            var versionInfoJsonStaging = await client.GetStringAsync(DalamudLauncher.REMOTE_BASE + GetBetaTrackName(settings));
+            client.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue
+            {
+                NoCache = true,
+            };
 
-            var versionInfoRelease = JsonConvert.DeserializeObject<DalamudVersionInfo>(versionInfoJsonRelease);
-            var versionInfoStaging = JsonConvert.DeserializeObject<DalamudVersionInfo>(versionInfoJsonStaging);
+            var versionInfoJsonRelease = await client.GetStringAsync(DalamudLauncher.REMOTE_BASE + "release").ConfigureAwait(false);
+
+            DalamudVersionInfo versionInfoRelease = JsonConvert.DeserializeObject<DalamudVersionInfo>(versionInfoJsonRelease);
+
+            DalamudVersionInfo? versionInfoStaging = null;
+
+            if (!string.IsNullOrEmpty(settings.DalamudBetaKey))
+            {
+                var versionInfoJsonStaging = await client.GetAsync(DalamudLauncher.REMOTE_BASE + GetBetaTrackName(settings)).ConfigureAwait(false);
+
+                if (versionInfoJsonStaging.StatusCode != HttpStatusCode.BadRequest)
+                    versionInfoStaging = JsonConvert.DeserializeObject<DalamudVersionInfo>(await versionInfoJsonStaging.Content.ReadAsStringAsync().ConfigureAwait(false));
+            }
 
             return (versionInfoRelease, versionInfoStaging);
         }
@@ -121,11 +141,11 @@ namespace XIVLauncher.Common.Dalamud
             // GitHub requires TLS 1.2, we need to hardcode this for Windows 7
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
-            var (versionInfoRelease, versionInfoStaging) = await GetVersionInfo(settings);
+            var (versionInfoRelease, versionInfoStaging) = await GetVersionInfo(settings).ConfigureAwait(false);
 
             var remoteVersionInfo = versionInfoRelease;
 
-            if (versionInfoStaging.Key == settings.DalamudBetaKey)
+            if (versionInfoStaging?.Key != null && versionInfoStaging.Key == settings.DalamudBetaKey)
             {
                 remoteVersionInfo = versionInfoStaging;
                 IsStaging = true;
@@ -138,14 +158,13 @@ namespace XIVLauncher.Common.Dalamud
 
             var versionInfoJson = JsonConvert.SerializeObject(remoteVersionInfo);
 
-            var addonPath = new DirectoryInfo(Path.Combine(Paths.RoamingPath, "addon", "Hooks"));
+            var addonPath = new DirectoryInfo(Path.Combine(this.addonDirectory.FullName, "Hooks"));
             var currentVersionPath = new DirectoryInfo(Path.Combine(addonPath.FullName, remoteVersionInfo.AssemblyVersion));
-            var runtimePath = new DirectoryInfo(Path.Combine(Paths.RoamingPath, "runtime"));
             var runtimePaths = new DirectoryInfo[]
             {
-                new(Path.Combine(runtimePath.FullName, "host", "fxr", remoteVersionInfo.RuntimeVersion)),
-                new(Path.Combine(runtimePath.FullName, "shared", "Microsoft.NETCore.App", remoteVersionInfo.RuntimeVersion)),
-                new(Path.Combine(runtimePath.FullName, "shared", "Microsoft.WindowsDesktop.App", remoteVersionInfo.RuntimeVersion)),
+                new(Path.Combine(this.runtimeDirectory.FullName, "host", "fxr", remoteVersionInfo.RuntimeVersion)),
+                new(Path.Combine(this.runtimeDirectory.FullName, "shared", "Microsoft.NETCore.App", remoteVersionInfo.RuntimeVersion)),
+                new(Path.Combine(this.runtimeDirectory.FullName, "shared", "Microsoft.WindowsDesktop.App", remoteVersionInfo.RuntimeVersion)),
             };
 
             if (!currentVersionPath.Exists || !IsIntegrity(currentVersionPath))
@@ -160,7 +179,7 @@ namespace XIVLauncher.Common.Dalamud
                     CleanUpOld(addonPath, remoteVersionInfo.AssemblyVersion);
 
                     // This is a good indicator that we should clear the UID cache
-                    cache.Reset();
+                    cache?.Reset();
                 }
                 catch (Exception ex)
                 {
@@ -175,15 +194,21 @@ namespace XIVLauncher.Common.Dalamud
             {
                 Log.Information("[DUPDATE] Now starting for .NET Runtime {0}", remoteVersionInfo.RuntimeVersion);
 
-                if (runtimePaths.Any(p => !p.Exists))
+                var versionFile = new FileInfo(Path.Combine(this.runtimeDirectory.FullName, "version"));
+                var localVersion = "5.0.6"; // This is the version we first shipped. We didn't write out a version file, so we can't check it.
+                if (versionFile.Exists)
+                    localVersion = File.ReadAllText(versionFile.FullName);
+
+                if (runtimePaths.Any(p => !p.Exists) || localVersion != remoteVersionInfo.RuntimeVersion)
                 {
-                    Log.Information("[DUPDATE] Not found, redownloading");
+                    Log.Information("[DUPDATE] Not found or outdated: {LocalVer} - {RemoteVer}", localVersion, remoteVersionInfo.RuntimeVersion);
 
                     SetOverlayProgress(IDalamudLoadingOverlay.DalamudUpdateStep.Runtime);
 
                     try
                     {
-                        await DownloadRuntime(runtimePath, remoteVersionInfo.RuntimeVersion);
+                        await DownloadRuntime(this.runtimeDirectory, remoteVersionInfo.RuntimeVersion);
+                        File.WriteAllText(versionFile.FullName, remoteVersionInfo.RuntimeVersion);
                     }
                     catch (Exception ex)
                     {
@@ -198,28 +223,7 @@ namespace XIVLauncher.Common.Dalamud
             try
             {
                 SetOverlayProgress(IDalamudLoadingOverlay.DalamudUpdateStep.Assets);
-
-                var assetBase = new DirectoryInfo(Path.Combine(Paths.RoamingPath, "dalamudAssets"));
-
-                if (!AssetManager.TryEnsureAssets(assetBase, out var assetsDir))
-                {
-                    Log.Information("[DUPDATE] Assets not ensured, bailing out...");
-                    State = DownloadState.Failed;
-
-                    // TODO(goat): We might want to try again here
-                    try
-                    {
-                        assetBase.Delete(true);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Error(ex, "Tried to recover assets, didn't work");
-                    }
-
-                    return;
-                }
-
-                AssetDirectory = assetsDir;
+                AssetDirectory = await AssetManager.EnsureAssets(assetDirectory).ConfigureAwait(true);
             }
             catch (Exception ex)
             {
@@ -286,7 +290,7 @@ namespace XIVLauncher.Common.Dalamud
 
                 foreach (var hash in hashes)
                 {
-                    var file = Path.Combine(addonPath.FullName, hash.Key);
+                    var file = Path.Combine(addonPath.FullName, hash.Key.Replace("\\", "/"));
                     using var fileStream = File.OpenRead(file);
                     using var md5 = MD5.Create();
 
@@ -354,6 +358,11 @@ namespace XIVLauncher.Common.Dalamud
             using var client = new HttpClient
             {
                 Timeout = TimeSpan.FromMinutes(25),
+            };
+
+            client.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue
+            {
+                NoCache = true,
             };
 
             var bytes = await client.GetByteArrayAsync(version.DownloadUrl).ConfigureAwait(true);

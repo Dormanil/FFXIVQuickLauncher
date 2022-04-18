@@ -336,19 +336,19 @@
     "description": "MainWindowViewModel.PatcherOnFail"
   },
   "PatchManNoInstaller": {
-    "message": "The patch installer could not start correctly.\n{0}\n\nIf you have denied access to it, please try again. If this issue persists, please contact us via Discord.",
+    "message": "更新程序无法正常启动。\n{0}\n\n如果您刚才拒绝了权限请求，请重试并授权。\n如果该问题仍然持续，请在 Discord 上联系我们。",
     "description": "MainWindowViewModel.HandlePatchStart"
   },
   "FreeSpaceError": {
-    "message": "There is not enough space on your drive to download patches.\n\nYou can change the location patches are downloaded to in the settings.\n\nRequired:{0}\nFree:{1}",
+    "message": "您的磁盘空间不足，无法下载更新。\n\n您可以在设置中更改更新下载目录。\n\n需要：{0}\n可用：{1}",
     "description": "MainWindowViewModel.HandlePatchStart"
   },
   "FreeSpaceErrorAll": {
-    "message": "There is not enough space on your drive to download all patches.\n\nYou can change the location patches are downloaded to in the XIVLauncher settings.\n\nRequired:{0}\nFree:{1}",
+    "message": "您的磁盘空间不足，无法下载所有更新。\n\n您可以在 XIVLauncher 的设置中更改更新下载目录。\n\n需要：{0}\n可用：{1}",
     "description": "MainWindowViewModel.HandlePatchStart"
   },
   "FreeSpaceGameError": {
-    "message": "There is not enough space on your drive to install patches.\n\nYou can change the location the game is installed to in the settings.\n\nRequired:{0}\nFree:{1}",
+    "message": "您的磁盘空间不足，无法安装更新。\n\n您可以在设置中更改游戏安装目录。\n\n需要：{0}\n可用：{1}",
     "description": "MainWindowViewModel.HandlePatchStart"
   },
   "LoginBoxUsername": {
@@ -432,7 +432,7 @@
     "description": "<<GetLoginFunc>b__0>d.MoveNext"
   },
   "DuplicateOtpAfterSuccess": {
-    "message": "This OTP has been already used.\nIt may take up to 30 seconds for a new one.",
+    "message": "此验证码已被使用。\n新的验证码可能需要30秒。",
     "description": "<>c__DisplayClass21_1.<Login>g__OnOtpResult|1"
   },
   "CheckBootVersionError": {
@@ -472,15 +472,15 @@
     "description": "<RepairGame>d__25.MoveNext"
   },
   "GameRepairSuccess0": {
-    "message": "All game files seem to be valid.",
+    "message": "所有游戏文件似乎都是有效的。",
     "description": "<RepairGame>d__25.MoveNext"
   },
   "GameRepairSuccess1": {
-    "message": "XIVLauncher has successfully repaired 1 game file.",
+    "message": "XIVLauncher 已成功修复 1 个游戏文件。",
     "description": "<RepairGame>d__25.MoveNext"
   },
   "GameRepairSuccessPlural": {
-    "message": "XIVLauncher has successfully repaired {0} game files.",
+    "message": "XIVLauncher 已成功修复 {0} 个游戏文件。",
     "description": "<RepairGame>d__25.MoveNext"
   },
   "GameRepairSuccess_LaunchGame": {
@@ -496,7 +496,7 @@
     "description": "<RepairGame>d__25.MoveNext"
   },
   "GameRepairError": {
-    "message": "An error occurred while repairing the game files.\nYou may have to reinstall the game.",
+    "message": "修复游戏檔案时出現錯誤。\n您可能需要重新安装游戏。",
     "description": "<RepairGame>d__25.MoveNext"
   },
   "GameRepairSuccess_TryAgain": {
@@ -516,11 +516,11 @@
     "description": "<StartGameAndAddon>d__28.MoveNext"
   },
   "AddonLoadError": {
-    "message": "This could be caused by your antivirus, please check its logs and add any needed exclusions.",
+    "message": "这可能是由您的抗病毒引起的，请检查其日志并添加需要的排除项。",
     "description": "<StartGameAndAddon>d__28.MoveNext"
   },
   "LoginIoErrorSummary": {
-    "message": "Could not locate game data files.",
+    "message": "无法找到游戏数据文件。",
     "description": "<TryLoginToGame>d__23.MoveNext"
   },
   "LoginIoErrorActionable": {
@@ -544,11 +544,11 @@
     "description": "<TryLoginToGame>d__23.MoveNext"
   },
   "LoginGenericErrorCheckOtpUse": {
-    "message": "If you're using OTP, then tick on \"{0}\" checkbox and try again.",
+    "message": "如果您正在使用动态密码 (OTP)，请在\"{0}\"复选框上打勾，然后重试。",
     "description": "<TryLoginToGame>d__23.MoveNext"
   },
   "LoginGenericErrorCheckOtp": {
-    "message": "Double check whether your OTP device's clock is correct.\nIf you have recently logged in, then try logging in again in 30 seconds.",
+    "message": "请仔细检查您的 OTP 设备的时钟是否正确。\n如果您最近已登录，请尝试在 30 秒后再次登录。",
     "description": "<TryLoginToGame>d__23.MoveNext"
   },
   "LoginGenericServerIssue": {
@@ -588,11 +588,11 @@
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "LaunchGameNonZeroExitCode": {
-    "message": "It looks like the game has exited with a fatal error. Do you want to relaunch the game?\n\nExit code: 0x{0:X8}",
+    "message": "看起来游戏因致命错误而退出。你要重新启动游戏吗？\n\n退出代码：0x{0:X8}",
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "LaunchGameRelaunch": {
-    "message": "_Relaunch",
+    "message": "重启 (_R)",
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "LaunchGameClose": {
@@ -608,11 +608,11 @@
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "MultiboxDeniedWarningSummary": {
-    "message": "You can't launch more than two instances of the game by default.",
+    "message": "默认情况下，您不能启动两个以上的游戏实例。",
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "MultiboxDeniedWarningActionable": {
-    "message": "Please check if there is an instance of the game that did not close correctly. (Detected: {0})",
+    "message": "请检查是否存在未正确关闭的游戏实例。 (检测到：{0})",
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "LaunchGameKillThenRetry": {
@@ -620,19 +620,19 @@
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "GameExitedPrematurelyErrorSummary": {
-    "message": "XIVLauncher could not detect that the game started correctly.",
+    "message": "XIVLauncher 无法检测到游戏正确启动。",
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "GameExitedPrematurelyErrorActionable": {
-    "message": "This may be a temporary issue. Please try restarting your PC. It is possible that your game installation is not valid.",
+    "message": "这可能是暂时的问题。请尝试重启您的电脑。这有可能是你的游戏安装无效。",
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "BinaryNotPresentErrorSummary": {
-    "message": "Could not find the game executable.",
+    "message": "找不到游戏的启动档案。",
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "BinaryNotPresentErrorActionable": {
-    "message": "This might be caused by your antivirus. You may have to reinstall the game.",
+    "message": "这可能是由您的杀毒软件引起的。您可能需要重新安装游戏。",
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "UnexpectedErrorSummary": {
@@ -644,7 +644,7 @@
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "MultipleErrors": {
-    "message": "Multiple errors have occurred.",
+    "message": "发生了多个错误。",
     "description": "<TryProcessLoginResult>d__24.MoveNext"
   },
   "OtpInputPrompt": {
@@ -656,7 +656,7 @@
     "description": "OtpInputDialogViewModel.SetupLoc"
   },
   "OtpInputPromptBad": {
-    "message": "请输入一个有效的 OTP 密钥。\n长度为6位数字。",
+    "message": "请输入一个有效的动态密码 (OTP)。\n长度为6位数字。",
     "description": "OtpInputDialogViewModel.SetupLoc"
   },
   "PatchPreparing": {

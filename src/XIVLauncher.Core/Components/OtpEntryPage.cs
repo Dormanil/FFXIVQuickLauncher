@@ -1,6 +1,7 @@
 using System.Numerics;
 using ImGuiNET;
 using Serilog;
+using XIVLauncher.Common.Http;
 
 namespace XIVLauncher.Core.Components;
 
@@ -12,6 +13,8 @@ public class OtpEntryPage : Page
     public string? Result { get; private set; }
 
     public bool Cancelled { get; private set; }
+
+    private OtpListener? otpListener;
 
     public OtpEntryPage(LauncherApp app)
         : base(app)
@@ -34,12 +37,45 @@ public class OtpEntryPage : Page
         this.Result = null;
         this.Cancelled = false;
 
+        Program.DoAutoSoftwareKbd = false;
+
         // TODO(goat): This doesn't work if you call it right after starting the app... Steam probably takes a little while to initialize. Might be annoying for autologin.
-        if (Program.Steam.IsValid && Program.Steam.IsRunningOnSteamDeck())
+        if (Program.Steam != null && Program.Steam.IsValid && Program.Steam.IsRunningOnSteamDeck() && Environment.GetEnvironmentVariable("XL_NO_SWKBD") != "true")
         {
             var success = Program.Steam.ShowGamepadTextInput(false, false, "Please enter your OTP", 6, string.Empty);
             Log.Verbose("ShowGamepadTextInput: {Success}", success);
         }
+
+        if (App.Settings.IsOtpServer ?? false)
+        {
+            this.otpListener = new OtpListener("core-" + AppUtil.GetAssemblyVersion());
+            this.otpListener.OnOtpReceived += TryAcceptOtp;
+
+            try
+            {
+                // Start Listen
+                Task.Run(() => this.otpListener.Start());
+                Log.Debug("OTP server started...");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Could not start OTP HTTP listener");
+            }
+        }
+    }
+
+    private void TryAcceptOtp(string otp)
+    {
+        if (string.IsNullOrEmpty(otp) || otp.Length != 6)
+        {
+            Log.Error("Invalid OTP: {Otp}", otp);
+            return;
+        }
+
+        Log.Verbose("Received OTP: {Otp}", otp);
+        this.Result = otp;
+
+        Program.DoAutoSoftwareKbd = true;
     }
 
     public override void Draw()
@@ -76,10 +112,7 @@ public class OtpEntryPage : Page
 
             if (ImGui.Button("OK", buttonSize) || doEnter)
             {
-                if (this.otp.Length == 6)
-                {
-                    this.Result = this.otp;
-                }
+                TryAcceptOtp(this.otp);
             }
         }
 

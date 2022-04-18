@@ -1,2 +1,4 @@
-﻿• Uses a new CDN for Dalamud update checks & assets, as GitHub was causing a lot of network issues
-• Fixes an issue wherein disk space checks would fail when doing a fresh install on Wine
+﻿• Further improvements to GShade compatibility checks (thanks to Mortalitas!)
+• Further improvements to Dalamud compatibility checks (thanks to Franz!)
+• Some small performance improvements
+• Updated the localization files

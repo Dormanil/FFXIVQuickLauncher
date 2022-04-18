@@ -15,11 +15,11 @@ using Squirrel;
 using XIVLauncher.Common;
 using XIVLauncher.Common.Dalamud;
 using XIVLauncher.Common.Game;
-using XIVLauncher.Common.Parsers;
 using XIVLauncher.Common.PlatformAbstractions;
 using XIVLauncher.Common.Windows;
 using XIVLauncher.PlatformAbstractions;
 using XIVLauncher.Settings;
+using XIVLauncher.Settings.Parsers;
 using XIVLauncher.Support;
 using XIVLauncher.Windows;
 
@@ -34,6 +34,7 @@ namespace XIVLauncher
 
         public static ILauncherSettingsV3 Settings;
         public static ISteam Steam;
+        public static CommonUniqueIdCache UniqueIdCache;
 
 #if !XL_NOAUTOUPDATE
         private UpdateLoadingDialog _updateWindow;
@@ -47,8 +48,8 @@ namespace XIVLauncher
 
         public static Brush UaBrush = new LinearGradientBrush(new GradientStopCollection()
         {
-            new(Color.FromArgb(0xFF, 0x27, 0x3F, 0xC3), 0.5f),
-            new(Color.FromArgb(0xFF, 0xe6, 0xde, 0x12), 0.5f),
+            new(Color.FromArgb(0xFF, 0x00, 0x57, 0xB7), 0.5f),
+            new(Color.FromArgb(0xFF, 0xFF, 0xd7, 0x00), 0.5f),
         }, 0.7f);
 
         public App()
@@ -141,7 +142,8 @@ namespace XIVLauncher
                     Loc.SetupWithFallbacks();
                 }
             }
-            catch(Exception ex){
+            catch (Exception ex)
+            {
                 Log.Error(ex, "Could not get language information. Setting up fallbacks.");
                 Loc.Setup("{}");
             }
@@ -211,6 +213,8 @@ namespace XIVLauncher
             {
                 Settings.AcceptLanguage = Util.GenerateAcceptLanguage();
             }
+
+            UniqueIdCache = new CommonUniqueIdCache(new FileInfo(Path.Combine(Paths.RoamingPath, "uidCache.json")));
         }
 
         private void OnUpdateCheckFinished(bool finishUp)
@@ -232,7 +236,10 @@ namespace XIVLauncher
 
                 try
                 {
-                    DalamudUpdater = new DalamudUpdater(CommonUniqueIdCache.Instance);
+                    DalamudUpdater = new DalamudUpdater(new DirectoryInfo(Path.Combine(Paths.RoamingPath, "addon")),
+                        new DirectoryInfo(Path.Combine(Paths.RoamingPath, "runtime")),
+                        new DirectoryInfo(Path.Combine(Paths.RoamingPath, "dalamudAssets")),
+                        UniqueIdCache);
 
                     var dalamudWindowThread = new Thread(DalamudOverlayThreadStart);
                     dalamudWindowThread.SetApartmentState(ApartmentState.STA);
@@ -369,11 +376,11 @@ namespace XIVLauncher
             {
                 var dict = new ResourceDictionary
                 {
-                    {"PrimaryHueLightBrush", UaBrush},
+                    { "PrimaryHueLightBrush", UaBrush },
                     //{"PrimaryHueLightForegroundBrush", uaBrush},
-                    {"PrimaryHueMidBrush", UaBrush},
+                    { "PrimaryHueMidBrush", UaBrush },
                     //{"PrimaryHueMidForegroundBrush", uaBrush},
-                    {"PrimaryHueDarkBrush", UaBrush},
+                    { "PrimaryHueDarkBrush", UaBrush },
                     //{"PrimaryHueDarkForegroundBrush", uaBrush},
                 };
                 this.Resources.MergedDictionaries.Add(dict);

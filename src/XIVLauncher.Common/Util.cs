@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace XIVLauncher.Common
@@ -287,6 +288,61 @@ namespace XIVLauncher.Common
             }
 
             return sb.ToString().TrimEnd(Environment.NewLine.ToCharArray());
+        }
+
+        /// <summary>
+        /// Gets an attribute on an enum.
+        /// </summary>
+        /// <typeparam name="TAttribute">The type of attribute to get.</typeparam>
+        /// <param name="value">The enum value that has an attached attribute.</param>
+        /// <returns>The attached attribute, if any.</returns>
+        public static TAttribute? GetAttribute<TAttribute>(this Enum value)
+            where TAttribute : Attribute
+        {
+            var type = value.GetType();
+            var memInfo = type.GetMember(value.ToString());
+            var attributes = memInfo[0].GetCustomAttributes(typeof(TAttribute), false);
+            return (attributes.Length > 0) ? (TAttribute)attributes[0] : null;
+        }
+
+        public static void OpenBrowser(string url)
+        {
+            // https://github.com/dotnet/corefx/issues/10361
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                url = url.Replace("&", "^&");
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                Process.Start("xdg-open", url);
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                Process.Start("open", url);
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
+        }
+
+        public static void Untar(string path, string output)
+        {
+            var psi = new ProcessStartInfo("tar")
+            {
+                Arguments = $"-xf \"{path}\" -C \"{output}\""
+            };
+
+            var tarProcess = Process.Start(psi);
+
+            if (tarProcess == null)
+                throw new Exception("Could not start tar.");
+
+            tarProcess.WaitForExit();
+
+            if (tarProcess.ExitCode != 0)
+                throw new Exception("Could not untar compatibility tool");
         }
     }
 }

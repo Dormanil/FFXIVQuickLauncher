@@ -10,14 +10,13 @@ using System.Windows.Input;
 using CheapLoc;
 using MaterialDesignThemes.Wpf.Transitions;
 using Serilog;
-using XIVLauncher.Addon;
 using XIVLauncher.Common.Game;
 using Newtonsoft.Json.Linq;
-using XIVLauncher.Addon.Implementations;
 using XIVLauncher.Common;
+using XIVLauncher.Common.Addon;
+using XIVLauncher.Common.Addon.Implementations;
 using XIVLauncher.Common.Dalamud;
 using XIVLauncher.Common.Game.Patch.Acquisition;
-using XIVLauncher.PlatformAbstractions;
 using XIVLauncher.Support;
 using XIVLauncher.Windows.ViewModel;
 
@@ -250,7 +249,7 @@ namespace XIVLauncher.Windows
 
         private void ResetCacheButton_OnClick(object sender, RoutedEventArgs e)
         {
-            CommonUniqueIdCache.Instance.Reset();
+            App.UniqueIdCache.Reset();
         }
 
         private void RunIntegrityCheck_OnClick(object s, RoutedEventArgs e)

@@ -5,9 +5,16 @@ namespace XIVLauncher.Core;
 
 public static class ImGuiHelpers
 {
-    public static Vector2 ViewportSize => ImGui.GetMainViewport().Size;
+    public static Vector2 ViewportSize => ImGui.GetIO().DisplaySize;
 
     public static float GlobalScale => ImGui.GetIO().FontGlobalScale;
+
+    public static void TextWrapped(string text)
+    {
+        ImGui.PushTextWrapPos();
+        ImGui.TextUnformatted(text);
+        ImGui.PopTextWrapPos();
+    }
 
     public static void CenteredText(string text)
     {

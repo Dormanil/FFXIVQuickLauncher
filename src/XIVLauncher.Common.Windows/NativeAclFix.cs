@@ -4,10 +4,10 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Linq;
 using System.Diagnostics;
-using System.Reflection;
-using Microsoft.Win32.SafeHandles;
 using System.Threading;
 using Serilog;
+using XIVLauncher.Common.Game.Exceptions;
+
 // ReSharper disable InconsistentNaming
 
 namespace XIVLauncher.Common.Game
@@ -302,25 +302,6 @@ namespace XIVLauncher.Common.Game
             #endregion
         }
 
-        private class ExistingProcess : Process
-        {
-            public ExistingProcess(IntPtr handle)
-            {
-                SetHandle(handle);
-            }
-
-            private void SetHandle(IntPtr handle)
-            {
-                var baseType = GetType().BaseType;
-                if (baseType == null)
-                    return;
-
-                var setProcessHandleMethod = baseType.GetMethod("SetProcessHandle",
-                    BindingFlags.NonPublic | BindingFlags.Instance);
-                setProcessHandleMethod?.Invoke(this, new object[] {new SafeProcessHandle(handle, true)});
-            }
-        }
-
         public static Process LaunchGame(string workingDir, string exePath, string arguments, IDictionary<string, string> envVars, DpiAwareness dpiAwareness, Action<Process> beforeResume)
         {
             Process process = null;
@@ -421,7 +402,6 @@ namespace XIVLauncher.Common.Game
                     {
                         process.WaitForInputIdle();
 
-
                         Thread.Sleep(100);
                     } while (IntPtr.Zero == TryFindGameWindow(process));
                 }
@@ -451,7 +431,7 @@ namespace XIVLauncher.Common.Game
                     throw new Win32Exception(Marshal.GetLastWin32Error());
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 Log.Error(ex, "[NativeAclFix] Uncaught error during initialization, trying to kill process");
 
